@@ -19,7 +19,7 @@ preset scope), so isolation is the natural default.
 
 | mode | behavior |
 |------|----------|
-| `isolated` / `auto` (default) | every agent (root + subagent) mounts its own instance |
+| `isolated` (default via `auto`) | every agent (root + subagent) mounts its own instance |
 | `root-only` | only the root agent mounts; subagents never do |
 
 `auto` behaves like `isolated`: every agent mounts its own MCP client instance
@@ -41,9 +41,24 @@ The plugin injects a conflict-consequence notice into the system prompt:
 - CONFLICT CONSEQUENCE: two agents must never share ONE browser instance, or
   they fight over the single "current tab" pointer — one agent's snapshot/click
   lands on the other's tab (ref not found).
+- Login state is NOT shared across agents; reuse a login by passing token/cookie
+  as data, not by sharing the browser.
+- Do not let two agents concurrently write the same business resource; split
+  responsibilities before delegating.
 
-That consequence statement is what lets the model decide, per delegation,
-whether a subagent should touch the browser at all.
+## Profile directories (single window, no lock conflicts)
+
+Each agent gets a **unique persistent browser profile** directory, so the
+browser opens as **one headed window** (no extra blank window) and concurrent
+agents never fight over a shared profile lock.
+
+- Directory: `<os tmpdir>/dsh-pam-<agent-id>` (globally unique per agent).
+- Cleanup: deleted a few seconds after the agent is disposed; stale leftovers
+  from a previous run are removed on plugin startup.
+
+The `--user-data-dir` argument is added **dynamically by the plugin** (not by
+the `args` list), because it must be unique per agent. Do not put `--isolated`
+or a fixed `--user-data-dir` in `args`.
 
 ## Configuration
 
@@ -57,7 +72,7 @@ config:
       perAgent: true
       transport: stdio
       command: <node executable>
-      args: [<playwright cli>, '--browser', 'chrome', '--isolated', '--idle-timeout', '600000']
+      args: [<playwright cli>, '--browser', 'chrome', '--idle-timeout', '600000']
       startupTimeoutMs: 15000
       failOnStartupError: false
 ```
@@ -83,3 +98,6 @@ do not mark them `perAgent`.
   a subagent does not inherit its parent's scope. The resource-saving option is
   "the subagent never calls browser tools" (lazy browser = no chrome), not "it
   reuses the parent's browser".
+- The profile directory is deleted a few seconds after disposal; there is a
+  brief window where it may still exist (best-effort cleanup, startup sweeps
+  stale leftovers).
