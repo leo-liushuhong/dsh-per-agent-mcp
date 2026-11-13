@@ -12,7 +12,6 @@
               - C:/Users/EDY/.dsh/pnpm-global/global/v11/f1ba5deecf382820a1996bc8b8b0d847c8cd0cbdb58241d0e90b74db7db23daf/node_modules/@playwright/mcp/cli.js
               - '--browser'
               - 'chrome'
-              - '--isolated'
               - '--idle-timeout'
               - '600000'
             startupTimeoutMs: 15000
