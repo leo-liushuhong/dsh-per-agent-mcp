@@ -9,9 +9,20 @@
  * Subagents do NOT inherit their parent's scope (they join the parent's preset
  * scope via `composeFrom`), so isolation is the natural default. The `mode`
  * switch selects whether subagents also get a (lazy) browser.
+ *
+ * Each agent gets a UNIQUE persistent browser profile directory (a single
+ * headed window, no extra blank window), so concurrent agents never fight over
+ * a shared profile lock. The profile directory is cleaned up when the agent is
+ * disposed and on plugin startup for stale leftovers.
  */
 
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { rm, readdir } from 'node:fs/promises'
+
 export const inject = ['agents', 'loader', 'systemPrompt']
+
+const PROFILE_PREFIX = 'dsh-pam-'
 
 const CONFLICT_NOTICE = [
   'Browser / MCP isolation policy:',
@@ -22,7 +33,15 @@ const CONFLICT_NOTICE = [
   '- CONFLICT CONSEQUENCE: two agents must never share ONE browser instance, or they fight over the single',
   '  "current tab" pointer — one agent\'s snapshot/click lands on the other\'s tab (ref not found).',
   '  Every agent therefore uses its own isolated instance.',
+  '- Login state is NOT shared across agents. To reuse a login, pass the token/cookie as DATA (via a message),',
+  '  not by sharing the browser instance.',
+  '- Do not let two agents concurrently WRITE the same business resource; split responsibilities before delegating.',
+  '- The browser may be unavailable if launch failed or chrome crashed; report the limitation in your reply.',
 ].join('\n')
+
+function profileDirFor(agentId) {
+  return join(tmpdir(), `${PROFILE_PREFIX}${agentId}`)
+}
 
 export function apply(ctx, config) {
   const servers = Array.isArray(config?.servers) ? config.servers : []
@@ -35,6 +54,8 @@ export function apply(ctx, config) {
   // agent id -> mounted fiber handles; plugin unload must dispose them because
   // unloading this plugin does not unwind registrations made on agent.ctx.
   const fibers = new Map()
+  // agent id -> unique profile directory, cleaned up on disposal.
+  const profileDirs = new Map()
 
   // Resolve the shipped mcp-client plugin object through the loader.
   let mcpClientPromise
@@ -61,14 +82,38 @@ export function apply(ctx, config) {
     return depth === undefined || depth === 0
   }
 
+  // Remove stale profile directories left behind by a previous run (e.g. a
+  // crash before the disposal cleanup ran). Only dirs without a live agent.
+  async function cleanupStaleProfiles() {
+    try {
+      const entries = await readdir(tmpdir())
+      const active = new Set(ctx.agents.list().map((a) => a.id))
+      for (const name of entries) {
+        if (!name.startsWith(PROFILE_PREFIX)) continue
+        const agentId = name.slice(PROFILE_PREFIX.length)
+        if (active.has(agentId)) continue
+        await rm(join(tmpdir(), name), { recursive: true, force: true }).catch(() => {})
+      }
+    } catch { /* best-effort */ }
+  }
+
+  // Build one server config with a per-agent unique --user-data-dir so the
+  // browser uses a persistent (single-window) profile without a profile lock
+  // conflict across concurrent agents.
+  function serverFor(agent, base) {
+    const userDataDir = profileDirFor(agent.id)
+    profileDirs.set(agent.id, userDataDir)
+    return { ...base, args: [...(Array.isArray(base.args) ? base.args : []), '--user-data-dir', userDataDir] }
+  }
+
   async function mountAgent(agent) {
     if (fibers.has(agent.id)) return
     if (perAgent.length === 0) return
     const list = []
     try {
       const McpClient = await getMcpClient()
-      for (const server of perAgent) {
-        const fiber = agent.ctx.plugin(McpClient, server)
+      for (const base of perAgent) {
+        const fiber = agent.ctx.plugin(McpClient, serverFor(agent, base))
         list.push(fiber)
       }
       fibers.set(agent.id, list)
@@ -99,6 +144,15 @@ export function apply(ctx, config) {
 
   ctx.on('agent/disposed', ({ agent }) => {
     fibers.delete(agent.id)
+    const dir = profileDirs.get(agent.id)
+    profileDirs.delete(agent.id)
+    if (dir) {
+      // chrome closes asynchronously after the scope unwinds; delete the
+      // profile directory a moment later, ignoring lock-file races.
+      setTimeout(() => {
+        rm(dir, { recursive: true, force: true }).catch(() => {})
+      }, 3000)
+    }
   })
 
   // Backfill declarative agents started before this plugin loaded.
@@ -116,4 +170,7 @@ export function apply(ctx, config) {
     }
     fibers.clear()
   })
+
+  // Best-effort startup cleanup of stale profiles from previous runs.
+  void cleanupStaleProfiles()
 }
