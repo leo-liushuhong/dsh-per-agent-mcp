@@ -70,12 +70,13 @@ config:
         - <@playwright/mcp cli.js 绝对路径>
         - '--browser'
         - 'chrome'
-        - '--isolated'                   # 内存 profile，进程退出即回收
         - '--idle-timeout'
         - '600000'                       # 空闲 10 分钟自动关浏览器，防泄漏
       startupTimeoutMs: 15000            # 防 MCP 挂起阻塞 Agent 创建
       failOnStartupError: false          # 启动失败只告警，不阻断 Agent
 ```
+
+> ⚠️ **不要**在 `args` 里加 `--isolated` 或固定的 `--user-data-dir`：插件的 `index.js` 会**动态为每个 Agent 生成唯一的 `--user-data-dir`**（`<系统临时目录>/dsh-pam-<agent-id>`），这样浏览器是**单窗口**（无多余空窗口）且多 Agent 不抢 profile 锁；Agent 销毁后延迟删除目录，插件启动时清理残留。
 
 字段说明：
 
@@ -106,8 +107,9 @@ config:
 ## 限制（Limitations）
 
 1. **接入新 MCP 仍需配置 + 重启**：DSH 无运行时动态注册 MCP 的机制（MCP client 是 Host 插件），「接入」这个动作无法热加载；但接入后，per-agent 实例是**动态**创建/销毁的，之后无需再重启。
-2. **登录态不跨 Agent 共享**：每个 Agent 的浏览器 profile 独立（`--isolated`），token 需各自注入。这是「隔离」的必然代价。
+2. **登录态不跨 Agent 共享**：每个 Agent 的浏览器 profile 独立（唯一 `--user-data-dir`），token 需各自注入或通过消息传 token/cookie 数据。这是「隔离」的必然代价。
 3. **资源占用**：N 个活跃 Agent = N 个浏览器进程。通过 `--idle-timeout` 空闲回收 + 只对有状态 MCP 开启 `perAgent` 来控制。
+4. **profile 目录清理**：每个 Agent 的 profile 目录（`<临时目录>/dsh-pam-<agent-id>`）在 Agent 销毁后延迟 3 秒删除，插件启动时清理上次残留；极端情况下（崩溃）可能有短暂残留。
 
 ---
 
