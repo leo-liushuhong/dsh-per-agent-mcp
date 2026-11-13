@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Per-agent MCP",
+    "description": "Give each agent its own isolated MCP server instance (for example a dedicated browser) so agents no longer fight over one shared connection. Only servers marked perAgent are isolated; stateless API servers can stay global.",
+    "detail": "docs/DETAIL.md"
+  }
+}
