@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "逐智能体 MCP 隔离",
+    "description": "让每个智能体拥有独立的 MCP 服务实例（例如独立浏览器），避免多个智能体争抢同一个共享连接。仅 perAgent 标记的服务会被隔离，无状态 API 服务可保持全局共享。",
+    "detail": "docs/DETAIL.md"
+  }
+}
