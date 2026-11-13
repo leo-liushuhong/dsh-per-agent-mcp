@@ -60,6 +60,7 @@ agent.ctx.plugin(McpClient, serverConfig)
 
 ```yaml
 config:
+  mode: auto                            # auto(默认) / isolated / root-only
   servers:
     - serverName: playwright            # 有状态 → perAgent: true
       perAgent: true
@@ -80,6 +81,7 @@ config:
 
 | 字段 | 含义 |
 |------|------|
+| `mode` | `auto`/`isolated`（默认）= 每个 Agent（含子 agent）独立实例；`root-only` = 仅根 Agent 有浏览器，子 agent 不挂 |
 | `serverName` | MCP 命名空间（工具名 `mcp__<serverName>__*`），所有 Agent 可复用同名（靠 scope 隔离） |
 | `perAgent` | `true` = 每个 Agent 独立实例；`false`/省略 = 保持全局共享 |
 | `transport` | `stdio` 或 `streamable-http`（与 `dsh-mcp-client` 一致） |
@@ -87,6 +89,8 @@ config:
 | `failOnStartupError` | `false` = 启动失败只记录日志，不阻断 Agent |
 
 > 只有**有状态** MCP（Playwright 等）才需要 `perAgent: true`。无状态 API MCP（如你的云效 yunxiao）保持全局共享即可，天然无冲突，还能省资源。
+>
+> **浏览器惰性启动**：chrome 只在 Agent 首次调用 `browser_*` 工具时才启动，纯计算子 agent 不碰浏览器 = 零 chrome 开销。因此 `auto` 模式对所有 Agent 挂载浏览器工具是零额外成本的。
 
 ---
 
