@@ -1,0 +1,24 @@
+{
+  "name": "@local/dsh-per-agent-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Give each agent its own isolated MCP server instance (e.g. a dedicated browser) instead of sharing one global connection.",
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "docs",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
