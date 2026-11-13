@@ -2,6 +2,7 @@
     - id: per-agent-mcp
       name: '@local/dsh-per-agent-mcp'
       config:
+        mode: auto
         servers:
           - serverName: playwright
             perAgent: true
